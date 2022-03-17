@@ -1,23 +1,22 @@
 import requests
 import sqlite3
+import tools
 from collections.abc import Sequence
 from time import sleep
 from json import dumps
 
-test = list[list[int]]
-
 connection = sqlite3.connect('time.db')
 cursor = connection.cursor()
 
-token = '5212534616:AAHpsQFhNQAWPgMO56CI4_jSp7O4SxKw9Q0'
-base_url = 'https://api.telegram.org/bot'
+# Find another way of getting api token. I guess file descriptor
+# still can be opened after calling open function
+api_url = f'https://api.telegram.org/bot{open(".api_token").readline()}'
 
 
 def get_new_updates():
     new_updates = []
-    for update in requests.get(f'{base_url}{token}/getUpdates').json()["result"]:
-        print(update)
-        chat_id = update['message']['chat']['id']
+    for update in requests.get(f'{api_url}/getUpdates').json()["result"]:
+        chat_id = tools.get_chat_id(update)
         # Might be rewritten
         try:
             is_value_here = update['update_id'] in update_ids[chat_id]
@@ -41,6 +40,7 @@ def is_command(update):
 
 def send_message(chat_id, text, keyboard: Sequence[Sequence] = None):
     if keyboard:
+        # Also might be optimized, maybe with some generators
         inline_keyboard = []
         for row in keyboard:
             button_list = []
@@ -50,7 +50,7 @@ def send_message(chat_id, text, keyboard: Sequence[Sequence] = None):
 
         keyboard = dumps({'inline_keyboard': inline_keyboard})
 
-    requests.post(f'{base_url}{token}/sendMessage',
+    requests.post(f'{api_url}/sendMessage',
                   data={'chat_id': chat_id,
                         'text': text,
                         'reply_markup': keyboard})
@@ -61,6 +61,7 @@ def send_message(chat_id, text, keyboard: Sequence[Sequence] = None):
 update_ids = {}
 while True:
     updates = get_new_updates()
+    print(updates)
 
     for update in updates:
         chat_id = update['message']['chat']['id']
@@ -73,7 +74,11 @@ while True:
             continue
 
         if command == '/send_time':
-            send_message(chat_id, 'Введите временной промежуточек')
+            send_message(chat_id, 'Введите временной промежуточек',
+                         keyboard=[[1, 2, 3],
+                                   [4, 5, 6],
+                                   [7, 8, 9],
+                                   [0]])
             # Implement multi threading or processing solution
 
     sleep(1)
