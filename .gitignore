@@ -1,3 +1,5 @@
 testing_module.py
 .idea/
 tests.py
+.api_token
+__pycache__/
