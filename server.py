@@ -1,9 +1,7 @@
 import requests
 import sqlite3
 import tools
-from collections.abc import Sequence
 from time import sleep
-from json import dumps
 
 connection = sqlite3.connect('time.db')
 cursor = connection.cursor()
@@ -31,29 +29,19 @@ def get_new_updates():
 
 
 # returns command if there is actually a command in update
-def is_command(update):
-    # ENTITIES COULD BE NOT ONLY IF COMMAND WAS SENT(find a way to solve)
-    if 'entities' in update['message']:
-        return update['message']['text']
-    return False
+def get_command(update):
+    try:
+        for entity in update['message']['entities']:
+            if entity['type'] == 'bot_command':
+                return update['message']['text']
+    except KeyError:
+        return False
 
 
-def send_message(chat_id, text, keyboard: Sequence[Sequence] = None):
-    if keyboard:
-        # Also might be optimized, maybe with some generators
-        inline_keyboard = []
-        for row in keyboard:
-            button_list = []
-            for button in row:
-                button_list.append({'text': str(button), 'callback_data': button})
-            inline_keyboard.append(button_list)
-
-        keyboard = dumps({'inline_keyboard': inline_keyboard})
-
+def send_message(chat_id, text):
     requests.post(f'{api_url}/sendMessage',
                   data={'chat_id': chat_id,
-                        'text': text,
-                        'reply_markup': keyboard})
+                        'text': text})
 
 
 # this dict is needed because /getUpdates method returns every message (aka update),
@@ -64,21 +52,17 @@ while True:
     print(updates)
 
     for update in updates:
-        chat_id = update['message']['chat']['id']
+        chat_id = tools.get_chat_id(update)
         update_ids[chat_id].append(update['update_id'])
 
-        command = is_command(update)
+        command = get_command(update)
         if not command:
             # send_message(chat_id, "Sorry, but i can't talk with you, "
             #                       "my creator is watching")
             continue
 
         if command == '/send_time':
-            send_message(chat_id, 'Введите временной промежуточек',
-                         keyboard=[[1, 2, 3],
-                                   [4, 5, 6],
-                                   [7, 8, 9],
-                                   [0]])
+            send_message(chat_id, 'Введите временной промежуточек')
             # Implement multi threading or processing solution
 
     sleep(1)
