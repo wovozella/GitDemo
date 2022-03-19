@@ -3,3 +3,4 @@ testing_module.py
 tests.py
 .api_token
 __pycache__/
+db_tests.py

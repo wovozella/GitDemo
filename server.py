@@ -2,7 +2,6 @@ import requests
 import sqlite3
 import tools
 from time import sleep
-from json import dumps
 
 connection = sqlite3.connect('time.db')
 cursor = connection.cursor()
@@ -11,6 +10,15 @@ cursor = connection.cursor()
 # still can be opened after calling open function
 api_url = f'https://api.telegram.org/bot{open(".api_token").readline()}'
 
+
+# This list is needed because main thread of execution must not see updates,
+# that processing in other threads. List must be filled with chat id in the
+# beginning of thread and removed in the end
+ignore_chat_ids = []
+
+# this dict is needed because /getUpdates method returns every message (aka update),
+# that has been sent to a bot for a whole day
+update_ids = {}
 
 def get_new_updates():
     new_updates = []
@@ -47,8 +55,9 @@ def send_message(chat_id, text, keyboard=None):
 
 
 
-def chat_specific_thread(chat_id):
-    # this is temporary line
+def time_input_thread(chat_id, command):
+    ignore_chat_ids.append(chat_id)
+    # in case of much input, just cut all updates before dialog below
     update_ids[chat_id] = tools.get_all_update_ids()[chat_id]
 
     while True:
@@ -58,24 +67,25 @@ def chat_specific_thread(chat_id):
 
                 if tools.valid_time_input(update):
                     start_hour, end_hour = update['message']['text'].split('-')
-                    send_message(chat_id, "Your input is correct.\n"
-                                          "You ain't dumb!")
+                    if command == '/give_time':
+                        pass
+
+                    ignore_chat_ids.remove(chat_id)
                     return
                 else:
-                    send_message(chat_id, 'Your input is incorrect, please repeat')
+                    send_message(chat_id, 'Некорректный ввод, попробуй ещё раз')
 
         sleep(1)
 
 
-# this dict is needed because /getUpdates method returns every message (aka update),
-# that has been sent to a bot for a whole day
-update_ids = {}
 while True:
     updates = get_new_updates()
     # print(updates)
 
     for update in updates:
         chat_id = tools.get_chat_id(update)
+        if chat_id in ignore_chat_ids:
+            continue
         update_ids[chat_id].append(update['update_id'])
 
         command = get_command(update)
@@ -84,11 +94,20 @@ while True:
             #                       "my creator is watching")
             continue
 
-        if command == '/send_time':
+        if command in ('/give_time', '/take_time'):
             send_message(chat_id, 'Введите временной промежуток в формате\n'
                                   '8-24',
                          tools.cancel_inline_keyboard)
-            chat_specific_thread(chat_id)
+            time_input_thread(chat_id, command)
             # Implement multi threading or processing solution
+
+        if command == '/available_time':
+            # Output an available time slots, posted by another,
+            # but not the user itself
+            pass
+
+        if command == 'edit_my_posts':
+            # show all posted time slots and allow to edit it
+            pass
 
     sleep(1)
