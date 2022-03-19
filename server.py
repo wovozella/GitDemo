@@ -2,6 +2,7 @@ import requests
 import sqlite3
 import tools
 from time import sleep
+from json import dumps
 
 connection = sqlite3.connect('time.db')
 cursor = connection.cursor()
@@ -38,10 +39,32 @@ def get_command(update):
         return False
 
 
-def send_message(chat_id, text):
-    requests.post(f'{api_url}/sendMessage',
+def send_message(chat_id, text, keyboard=None):
+    print(requests.post(f'{api_url}/sendMessage',
                   data={'chat_id': chat_id,
-                        'text': text})
+                        'text': text,
+                        'reply_markup': keyboard}).json())
+
+
+
+def chat_specific_thread(chat_id):
+    # this is temporary line
+    update_ids[chat_id] = tools.get_all_update_ids()[chat_id]
+
+    while True:
+        for update in get_new_updates():
+            if tools.get_chat_id(update) == chat_id:
+                update_ids[chat_id].append(update['update_id'])
+
+                if tools.valid_time_input(update):
+                    start_hour, end_hour = update['message']['text'].split('-')
+                    send_message(chat_id, "Your input is correct.\n"
+                                          "You ain't dumb!")
+                    return
+                else:
+                    send_message(chat_id, 'Your input is incorrect, please repeat')
+
+        sleep(1)
 
 
 # this dict is needed because /getUpdates method returns every message (aka update),
@@ -49,7 +72,7 @@ def send_message(chat_id, text):
 update_ids = {}
 while True:
     updates = get_new_updates()
-    print(updates)
+    # print(updates)
 
     for update in updates:
         chat_id = tools.get_chat_id(update)
@@ -62,7 +85,10 @@ while True:
             continue
 
         if command == '/send_time':
-            send_message(chat_id, 'Введите временной промежуточек')
+            send_message(chat_id, 'Введите временной промежуток в формате\n'
+                                  '8-24',
+                         tools.cancel_inline_keyboard)
+            chat_specific_thread(chat_id)
             # Implement multi threading or processing solution
 
     sleep(1)
