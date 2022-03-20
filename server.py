@@ -1,10 +1,8 @@
 import requests
-import sqlite3
 import tools
+import db_interface as db
 from time import sleep
 
-connection = sqlite3.connect('time.db')
-cursor = connection.cursor()
 
 # Find another way of getting api token. I guess file descriptor
 # still can be opened after calling open function
@@ -65,10 +63,10 @@ def time_input_thread(chat_id, command):
             if tools.get_chat_id(update) == chat_id:
                 update_ids[chat_id].append(update['update_id'])
 
-                if tools.valid_time_input(update):
+                if tools.valid_input(update):
                     start_hour, end_hour = update['message']['text'].split('-')
                     if command == '/give_time':
-                        pass
+                        send_message(chat_id, 'Успешно')
 
                     ignore_chat_ids.remove(chat_id)
                     return
@@ -95,8 +93,8 @@ while True:
             continue
 
         if command in ('/give_time', '/take_time'):
-            send_message(chat_id, 'Введите временной промежуток в формате\n'
-                                  '8-24',
+            send_message(chat_id, 'Введите дату и временной промежуток в формате\n'
+                                  '04.02 8-24',
                          tools.cancel_inline_keyboard)
             time_input_thread(chat_id, command)
             # Implement multi threading or processing solution
