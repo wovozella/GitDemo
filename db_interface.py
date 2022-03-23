@@ -3,10 +3,8 @@ import sqlite3
 
 def connect(func):
     def wrapper(*args, **kwargs):
-        con = sqlite3.connect('time.db')
-        ret = func(con.cursor(), *args, **kwargs)
-        con.commit()
-        con.close()
+        with sqlite3.connect('time.db') as con:
+            ret = func(con.cursor(), *args, **kwargs)
         return ret
 
     return wrapper
@@ -14,11 +12,11 @@ def connect(func):
 
 @connect
 def initialize_tables(cur):
-    cur.execute("""CREATE TABLE IF NOT EXISTS 
-    given_time (date int, start_hour int, end_hour int, courier text)""")
-
-    cur.execute("""CREATE TABLE IF NOT EXISTS 
-    taken_time (date int, start_hour int, end_hour int, courier text);""")
+    cur.executescript("""
+    CREATE TABLE IF NOT EXISTS 
+        time_to_give (date date, start_hour int, end_hour int, courier text);
+    CREATE TABLE IF NOT EXISTS
+        time_to_take (date int, start_hour int, end_hour int, courier text);""")
 
 
 @connect
@@ -29,10 +27,32 @@ def insert_value(cur, table, values):
 
 
 @connect
-def delete_value(cur, table, conditions="date IS NOT NULL"):
-    cur.execute(f"DELETE FROM {table} WHERE {conditions}")
+def delete_value(cur, table, conditions="WHERE date IS NOT NULL"):
+    cur.execute(f"DELETE FROM {table} {conditions}")
 
 
 @connect
-def select_value(cur, table, conditions="date IS NOT NULL"):
-    return cur.execute(f"SELECT * FROM {table} WHERE {conditions}").fetchall()
+def select_value(cur, table, columns="*", conditions="WHERE date IS NOT NULL"):
+    return cur.execute(f"SELECT {columns} FROM {table} {conditions}").fetchall()
+
+
+
+# If you don't want to write another function, that does almost exactly
+# the same, despite returning courier specific posts, then add something
+# like this argument below
+def formate_message(table_name, courier_specific=False):
+    message = ''
+    all_times = {date[0]: [] for date in select_value(table_name, 'DISTINCT date',
+                                                      'ORDER BY date')}
+    for date, *details in select_value(table_name, conditions="ORDER BY date, start_hour"):
+        all_times[date].append(details)
+
+    for date, values in all_times.items():
+        times = ''
+        for time in values:
+            *hours, name = time
+            times += f'{name} {hours[0]}-{hours[1]}\n'
+
+        message += f'{date}\n' \
+                   f'{times}\n'
+    return message[:-2]

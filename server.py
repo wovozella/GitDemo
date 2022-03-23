@@ -46,10 +46,10 @@ def get_command(update):
 
 
 def send_message(chat_id, text, keyboard=None):
-    print(requests.post(f'{api_url}/sendMessage',
+    requests.post(f'{api_url}/sendMessage',
                   data={'chat_id': chat_id,
                         'text': text,
-                        'reply_markup': keyboard}).json())
+                        'reply_markup': keyboard})
 
 
 
@@ -63,11 +63,13 @@ def time_input_thread(chat_id, command):
             if tools.get_chat_id(update) == chat_id:
                 update_ids[chat_id].append(update['update_id'])
 
-                if tools.valid_input(update):
-                    start_hour, end_hour = update['message']['text'].split('-')
-                    if command == '/give_time':
-                        send_message(chat_id, 'Успешно')
+                valid_time = tools.valid_input(update)
+                if valid_time:
+                    take_or_give = command.split('_')[0][1:]
+                    name = update['message']['from']['first_name']
+                    db.insert_value(f'time_to_{take_or_give}', (*valid_time, name))
 
+                    send_message(chat_id, 'Успешно')
                     ignore_chat_ids.remove(chat_id)
                     return
                 else:
@@ -99,10 +101,12 @@ while True:
             time_input_thread(chat_id, command)
             # Implement multi threading or processing solution
 
-        if command == '/available_time':
-            # Output an available time slots, posted by another,
-            # but not the user itself
-            pass
+        if command in ('/who_gives', '/who_takes'):
+            take_or_give = command.split('_')[1][:-1]
+            message = db.formate_message(f'time_to_{take_or_give}')
+            if not message:
+                message = f'Sorry, there is no one to {take_or_give} time'
+            send_message(chat_id, message)
 
         if command == 'edit_my_posts':
             # show all posted time slots and allow to edit it
