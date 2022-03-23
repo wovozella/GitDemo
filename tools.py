@@ -1,12 +1,11 @@
 import requests
-import time
 from calendar import monthrange
 from datetime import datetime
 from json import dumps
 
 api_url = f'https://api.telegram.org/bot{open(".api_token").readline()}'
 now = datetime.now()
-month_in_seconds = 2_592_000 # 30 days
+month_in_seconds = 2_592_000    # 30 days
 
 
 # It's too complicated to easily iterate dictionaries with undefined nesting
@@ -28,7 +27,6 @@ def get_chat_id(dictionary):
     return __chat_id
 
 
-
 def get_all_update_ids():
     ret = {}
     resp = requests.get(f'{api_url}/getUpdates').json()["result"]
@@ -47,8 +45,8 @@ def valid_input(update):
         start, end = time.split('-')
         day, month = date.split('.')
 
-        month = int(month)
         day = int(day)
+        month = int(month)
         # might be rewritten to auto-checking, by parsing entered date
         # to unix time functions
         if 1 > month > 12:
@@ -79,7 +77,7 @@ def valid_input(update):
         if not 9 <= end <= 24:
             raise Exception('End hour must be between 9 and 24')
 
-        return True
+        return [date, start, end]
     # Probably better to clearly describe all Exceptions, that may be raised
     except Exception:
         return False
