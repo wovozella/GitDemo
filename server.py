@@ -18,11 +18,17 @@ ignore_chat_ids = []
 # that has been sent to a bot for a whole day
 update_ids = {}
 
-def get_new_updates():
+
+# default argument equals 0 because it has to be integer
+def get_new_updates(specific_chat_id_updates=0):
     new_updates = []
     for update in requests.get(f'{api_url}/getUpdates').json()["result"]:
         chat_id = tools.get_chat_id(update)
-        # Might be rewritten
+
+        if specific_chat_id_updates:
+            if specific_chat_id_updates != chat_id:
+                continue
+
         try:
             is_value_here = update['update_id'] in update_ids[chat_id]
         except KeyError:
@@ -35,7 +41,6 @@ def get_new_updates():
     return new_updates
 
 
-# returns command if there is actually a command in update
 def get_command(update):
     try:
         for entity in update['message']['entities']:
@@ -59,30 +64,29 @@ def time_input_thread(chat_id, command):
     update_ids[chat_id] = tools.get_all_update_ids()[chat_id]
 
     while True:
-        for update in get_new_updates():
-            if tools.get_chat_id(update) == chat_id:
-                update_ids[chat_id].append(update['update_id'])
+        for update in get_new_updates(chat_id):
+            # print(update)
+            update_ids[chat_id].append(update['update_id'])
 
-                valid_time = tools.valid_input(update)
-                if valid_time:
-                    take_or_give = command.split('_')[0][1:]
-                    name = update['message']['from']['first_name']
-                    db.insert_value(f'time_to_{take_or_give}', (*valid_time, name))
+            valid_time = tools.valid_input(update)
+            if valid_time:
+                take_or_give = command.split('_')[0][1:]
+                name = update['message']['from']['first_name']
+                db.insert_value(f'time_to_{take_or_give}', (*valid_time, name))
 
-                    send_message(chat_id, 'Успешно')
-                    ignore_chat_ids.remove(chat_id)
-                    return
-                else:
-                    send_message(chat_id, 'Некорректный ввод, попробуй ещё раз')
+                send_message(chat_id, 'Успешно')
+                ignore_chat_ids.remove(chat_id)
+                return
+            else:
+                send_message(chat_id, 'Некорректный ввод, попробуй ещё раз')
 
         sleep(1)
 
-
+update_ids = tools.get_all_update_ids()
 while True:
-    updates = get_new_updates()
-    # print(updates)
 
-    for update in updates:
+    for update in get_new_updates():
+        print(update)
         chat_id = tools.get_chat_id(update)
         if chat_id in ignore_chat_ids:
             continue
@@ -101,11 +105,11 @@ while True:
             time_input_thread(chat_id, command)
             # Implement multi threading or processing solution
 
-        if command in ('/who_gives', '/who_takes'):
-            take_or_give = command.split('_')[1][:-1]
+        if command in ('/who_give', '/who_take'):
+            take_or_give = command.split('_')[1]
             message = db.formate_message(f'time_to_{take_or_give}')
             if not message:
-                message = f'Sorry, there is no one to {take_or_give} time'
+                message = f'Пока что никто не делится временными'
             send_message(chat_id, message)
 
         if command == 'edit_my_posts':
