@@ -1,6 +1,6 @@
 import requests
 from calendar import monthrange
-from datetime import datetime
+from datetime import datetime, date
 from json import dumps
 
 api_url = f'https://api.telegram.org/bot{open(".api_token").readline()}'
@@ -41,28 +41,29 @@ def get_all_update_ids():
 def valid_input(update):
     # Comment this shit, please...
     try:
-        date, time = update['message']['text'].split(' ')
+        _date, time = update['message']['text'].split(' ')
         start, end = time.split('-')
-        day, month = date.split('.')
+        day, month = _date.split('.')
 
         day = int(day)
         month = int(month)
-        # might be rewritten to auto-checking, by parsing entered date
-        # to unix time functions
+        year = now.year    # Despite user don't input year, it's necessary for database
+
         if 1 > month > 12:
             raise Exception('Month must be between 1 and 12')
         if 1 > day > monthrange(now.year, month)[1]:
-            raise Exception('Day must be greater than 1 and less than current'
+            raise Exception('Day must be greater than 1 and less than entered'
                             'month maximum day')
+        if now.month == 12 and month == 1:
+            year += 1
 
-        entered_time = datetime(now.year, month, day).timestamp()
+        entered_time = datetime(year, month, day).timestamp()
         current_time = datetime(now.year, now.month, now.day).timestamp()
         if entered_time - current_time > month_in_seconds:
             raise Exception('Date must not be greater than 30 days after'
                             'the current day')
         if entered_time - current_time < 0:
             raise Exception('Date must not be less than current day')
-
 
         start = int(start)
         end = int(end)
@@ -77,9 +78,9 @@ def valid_input(update):
         if not 9 <= end <= 24:
             raise Exception('End hour must be between 9 and 24')
 
-        return [date, start, end]
+        return date(year, month, day), start, end
     # Probably better to clearly describe all Exceptions, that may be raised
-    except Exception:
+    except KeyError:
         return False
 
 
