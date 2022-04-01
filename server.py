@@ -19,6 +19,17 @@ ignore_chat_ids = []
 update_ids = {}
 
 
+# It's needed only for threads, so no return needed
+# For proper working, every decorated function must have chat id as a first argument
+def ignore_chat_id(func):
+    def nested(*args):
+        ignore_chat_ids.append(args[0])
+        func(chat_id, args)
+        ignore_chat_ids.remove(args[0])
+    return nested
+
+
+
 # default argument equals 0 because it has to be integer
 def get_new_updates(specific_chat_id_updates=0):
     new_updates = []
@@ -57,28 +68,30 @@ def send_message(chat_id, text, keyboard=None):
                         'reply_markup': keyboard})
 
 
-
+@ignore_chat_id
 def time_input_thread(chat_id, command):
-    ignore_chat_ids.append(chat_id)
     # in case of much input, just cut all updates before dialog below
     update_ids[chat_id] = tools.get_all_update_ids()[chat_id]
 
     while True:
         for update in get_new_updates(chat_id):
-            # print(update)
+            if 'callback_query' in update:
+                if update['callback_query']['data'] == 'cancel':
+                    send_message(chat_id, 'Отменено')
+                    return
+
             update_ids[chat_id].append(update['update_id'])
 
             valid_time = tools.valid_input(update)
-            if valid_time:
+            if isinstance(valid_time, tuple):
                 take_or_give = command.split('_')[0][1:]
                 name = update['message']['from']['first_name']
                 db.insert_value(f'time_to_{take_or_give}', (*valid_time, name))
 
                 send_message(chat_id, 'Успешно')
-                ignore_chat_ids.remove(chat_id)
                 return
             else:
-                send_message(chat_id, 'Некорректный ввод, попробуй ещё раз')
+                send_message(chat_id, f'{valid_time}\nПопробуй ещё раз')
 
         sleep(1)
 
@@ -116,4 +129,4 @@ while True:
             # show all posted time slots and allow to edit it
             pass
 
-    sleep(1)
+    sleep(0.1)

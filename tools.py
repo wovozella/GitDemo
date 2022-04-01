@@ -8,6 +8,10 @@ now = datetime.now()
 month_in_seconds = 2_592_000    # 30 days
 
 
+# for avoiding not clearly raised exceptions in valid_input()
+built_in_exceptions = {chr(i) for i in range(97, 123)}
+
+
 # It's too complicated to easily iterate dictionaries with undefined nesting
 # that has more than one key, so the chat id stores in global variable,
 # which returns in another function.
@@ -43,45 +47,47 @@ def valid_input(update):
     try:
         _date, time = update['message']['text'].split(' ')
         start, end = time.split('-')
-        day, month = _date.split('.')
+        month, day = _date.split('.')
 
         day = int(day)
         month = int(month)
         year = now.year    # Despite user don't input year, it's necessary for database
 
         if 1 > month > 12:
-            raise Exception('Month must be between 1 and 12')
+            raise Exception('Месяц должен быть между 1 и 12')
         if 1 > day > monthrange(now.year, month)[1]:
-            raise Exception('Day must be greater than 1 and less than entered'
-                            'month maximum day')
+            raise Exception('День должен быть между 1 и максимальным днём'
+                            'в указанном месяце')
         if now.month == 12 and month == 1:
             year += 1
 
         entered_time = datetime(year, month, day).timestamp()
         current_time = datetime(now.year, now.month, now.day).timestamp()
         if entered_time - current_time > month_in_seconds:
-            raise Exception('Date must not be greater than 30 days after'
-                            'the current day')
+            raise Exception('Нельзя указать часы больше чем на 30 дней вперёд')
         if entered_time - current_time < 0:
-            raise Exception('Date must not be less than current day')
+            raise Exception('Дата должна быть не меньше текущего дня')
 
         start = int(start)
         end = int(end)
         if day == now.day:
             if start <= now.hour:
-                raise Exception('Start hour must be greater than current hour')
+                raise Exception('Первый час должен быть больше нынешнего часа')
 
         if start >= end:
-            raise Exception('End hour must be greater than the start hour')
+            raise Exception('Последний час должен быть после первого')
         if not 8 <= start <= 23:
-            raise Exception('Start hour must be between 8 and 23')
+            raise Exception('Первый час должен быть между 8 и 23')
         if not 9 <= end <= 24:
-            raise Exception('End hour must be between 9 and 24')
+            raise Exception('Последний час должен быть между 9 и 24')
 
         return date(year, month, day), start, end
     # Probably better to clearly describe all Exceptions, that may be raised
-    except KeyError:
-        return False
+    except Exception as error:
+        if set(error.args[0]).intersection(built_in_exceptions):
+            return 'Некорректный или неполный ввод'
+        return error.args[0]
+
 
 
 cancel_inline_keyboard = dumps({'inline_keyboard': [[{'text': 'Cancel',
