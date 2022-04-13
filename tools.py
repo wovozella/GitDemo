@@ -1,4 +1,4 @@
-import requests
+from db_interface import select_value
 from calendar import monthrange
 from datetime import datetime, date
 from json import dumps
@@ -10,6 +10,9 @@ month_in_seconds = 2_592_000    # 30 days
 
 # for avoiding not clearly raised exceptions in valid_input()
 built_in_exceptions = {chr(i) for i in range(97, 123)}
+
+days = {0: 'Понедельник', 1: 'Вторник', 2: 'Среда', 3: 'Четверг',
+        4: 'Пятница', 5: 'Суббота', 6: 'Воскресенте'}
 
 
 # It's too complicated to easily iterate dictionaries with undefined nesting
@@ -29,17 +32,6 @@ def __extract_chat_id(dictionary):
 def get_chat_id(dictionary):
     __extract_chat_id(dictionary)
     return __chat_id
-
-
-def get_all_update_ids():
-    ret = {}
-    resp = requests.get(f'{api_url}/getUpdates').json()["result"]
-    for update in resp:
-        chat_id = get_chat_id(update)
-        if chat_id not in ret:
-            ret[chat_id] = []
-        ret[chat_id].append(update['update_id'])
-    return ret
 
 
 def valid_input(update):
@@ -90,5 +82,50 @@ def valid_input(update):
 
 
 
-cancel_inline_keyboard = dumps({'inline_keyboard': [[{'text': 'Cancel',
+
+def get_message(table_name, specific='IS NOT NULL'):
+    """
+    Format message for responding on a who take/give command
+    based on relevant tables.
+    "specific" argument needs for showing courier his own times to edit/delete them
+    Returning message looks like that:
+
+    05.14 (date MM.DD bold text)
+    courier_name first_hour-last_hour (With link to user)
+    another_courier 15-23
+
+    05.16
+    and_another_courier 8-24
+    """
+
+    user_url = ' href="tg://user?id='
+    message = ''
+    # creating dict with date as a key
+    dates = {Date[0]: [] for Date in select_value(table_name, 'DISTINCT date',
+                                                  'ORDER BY date')}
+    # filling dates dict
+    for Date, *details in select_value(
+            table_name,
+            conditions=f"WHERE user_id {specific} ORDER BY date, start_hour"):
+        dates[Date].append(details)
+
+    for Date, values in dates.items():
+        times = ''
+        for time in values:
+            *hours, name, user_id = time
+            times += f'<a{user_url}{user_id}">{name}</a> {hours[0]}-{hours[1]}\n'
+
+
+        # Formatting date from YYYY-MM-DD to DD.MM
+        day_in_week = date(*[int(i) for i in Date.split('-')]).weekday()
+        Date = Date.split('-')
+        Date = Date[1] + '.' + Date[2]
+
+        message += f'<b>{Date} {days[day_in_week]}</b>\n' \
+                   f'{times}\n'
+    return message
+
+
+
+cancel_inline_keyboard = dumps({'inline_keyboard': [[{'text': 'Отменить',
                                                       'callback_data': 'cancel'}]]})
