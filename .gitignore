@@ -5,3 +5,4 @@ tests.py
 __pycache__/
 time.db
 updates_history.txt
+time.db
