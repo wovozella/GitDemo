@@ -3,10 +3,8 @@ from calendar import monthrange
 from datetime import datetime, date
 from json import dumps
 
-api_url = f'https://api.telegram.org/bot{open(".api_token").readline()}'
 now = datetime.now()
-month_in_seconds = 2_592_000    # 30 days
-
+month_in_seconds = 2_592_000  # 30 days
 
 # for avoiding not clearly raised exceptions in valid_input()
 built_in_exceptions = {chr(i) for i in range(97, 123)}
@@ -35,7 +33,6 @@ def get_chat_id(dictionary):
 
 
 def valid_input(update):
-    # Comment this shit, please...
     try:
         _date, time = update['message']['text'].split(' ')
         start, end = time.split('-')
@@ -43,14 +40,14 @@ def valid_input(update):
 
         day = int(day)
         month = int(month)
-        year = now.year    # Despite user don't input year, it's necessary for database
+        year = now.year  # Despite user don't input year, it's necessary for database
 
-        if 1 > month > 12:
+        if not 1 <= month <= 12:
             raise Exception('Месяц должен быть между 1 и 12')
-        if 1 > day > monthrange(now.year, month)[1]:
-            raise Exception('День должен быть между 1 и максимальным днём'
+        if not 1 <= day <= monthrange(now.year, month)[1]:
+            raise Exception('День должен быть между 1 и максимальным днём '
                             'в указанном месяце')
-        if now.month == 12 and month == 1:
+        if now.month == 12 and month == 1:  # december - january case
             year += 1
 
         entered_time = datetime(year, month, day).timestamp()
@@ -82,6 +79,32 @@ def valid_input(update):
 
 
 
+# 'time' arg for this function is return of valid_input function
+# personal arg for defining either find intersections with others couriers
+# or with yourself
+def time_intersect(time, table_name, user_id, personal):
+    date, start, end = time
+    table = 'time_to_' + table_name
+
+    condition = f'user_id != {user_id}'
+    if personal:
+        condition = f'user_id = {user_id}'
+
+    if str(date) not in [i[0] for i in select_value(table, 'DISTINCT date', condition)]:
+        return False
+    condition = condition + f' and date = "{date}"'
+    print(condition)
+
+    intersected = []
+    for time_interval in select_value(table, 'start_hour, end_hour, user_id', condition):
+        if set(range(*time_interval[:-1])).intersection(set(range(start, end))):
+            intersected.append(time_interval)
+
+    return intersected
+
+
+print(time_intersect((date(2022, 4, 20), 8, 24), 'give', 1171601459, True))
+
 
 def get_message(table_name, specific='IS NOT NULL'):
     """
@@ -106,7 +129,7 @@ def get_message(table_name, specific='IS NOT NULL'):
     # filling dates dict
     for Date, *details in select_value(
             table_name,
-            conditions=f"WHERE user_id {specific} ORDER BY date, start_hour"):
+            conditions=f"user_id {specific} ORDER BY date, start_hour"):
         dates[Date].append(details)
 
     for Date, values in dates.items():
@@ -114,7 +137,6 @@ def get_message(table_name, specific='IS NOT NULL'):
         for time in values:
             *hours, name, user_id = time
             times += f'<a{user_url}{user_id}">{name}</a> {hours[0]}-{hours[1]}\n'
-
 
         # Formatting date from YYYY-MM-DD to DD.MM
         day_in_week = date(*[int(i) for i in Date.split('-')]).weekday()
@@ -126,6 +148,6 @@ def get_message(table_name, specific='IS NOT NULL'):
     return message
 
 
-
-cancel_inline_keyboard = dumps({'inline_keyboard': [[{'text': 'Отменить',
-                                                      'callback_data': 'cancel'}]]})
+def inline_buttons(list_of_buttons: list):
+    buttons = [[{'text': button, 'callback_data': button} for button in list_of_buttons]]
+    return dumps({'inline_keyboard': buttons})

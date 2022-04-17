@@ -119,11 +119,6 @@ while True:
         chat_ID = tools.get_chat_id(update)
         command = get_command(update)
 
-        if 'callback_query' in update:
-            if update['callback_query']['data'] == 'Редактировать':
-                start_new_thread(time_input_thread, (chat_ID, '/edit'))
-            continue
-
         if command in ('/give', '/take'):
             start_new_thread(time_input_thread, (chat_ID, command))
 
