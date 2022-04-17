@@ -30,10 +30,10 @@ def insert_value(cur, table, values):
 
 
 @connect
-def delete_value(cur, table, conditions="WHERE date IS NOT NULL"):
-    cur.execute(f"DELETE FROM {table} {conditions}")
+def delete_value(cur, table, conditions="date IS NOT NULL"):
+    cur.execute(f"DELETE FROM {table} WHERE {conditions}")
 
 
 @connect
-def select_value(cur, table, columns="*", conditions="WHERE date IS NOT NULL"):
-    return cur.execute(f"SELECT {columns} FROM {table} {conditions}").fetchall()
+def select_value(cur, table, columns="*", conditions="date IS NOT NULL"):
+    return cur.execute(f"SELECT {columns} FROM {table} WHERE {conditions}").fetchall()
