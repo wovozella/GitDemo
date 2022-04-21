@@ -23,17 +23,30 @@ initialize_tables()
 
 
 @connect
-def insert_value(cur, table, values):
+def insert(cur, table, values):
     # if amount of values more or less than four, then
     # VALUES(?,...) must be calculated before execution
     cur.execute(f"INSERT INTO {table} VALUES(?, ?, ?, ?, ?)", values)
 
 
 @connect
-def delete_value(cur, table, conditions="date IS NOT NULL"):
-    cur.execute(f"DELETE FROM {table} WHERE {conditions}")
+def delete(cur, table, conditions="WHERE date IS NOT NULL"):
+    cur.execute(f"DELETE FROM {table} {conditions}")
 
 
 @connect
-def select_value(cur, table, columns="*", conditions="date IS NOT NULL"):
-    return cur.execute(f"SELECT {columns} FROM {table} WHERE {conditions}").fetchall()
+def update(cur, table, time, user_id):
+    date, start, end = time
+    cur.execute(f"UPDATE {table} "
+                f"SET start_hour={start}, end_hour={end} "
+                f"WHERE user_id = {user_id} AND date = '{date}'")
+
+
+@connect
+def select(cur, table, columns="*", conditions="WHERE date IS NOT NULL"):
+    return cur.execute(f"SELECT {columns} FROM {table} {conditions}").fetchall()
+
+
+# print(select('time_to_give', conditions='WHERE date = "2022-04-30"'))
+# update('time_to_give', ("2022-04-30", 8, 13), 1171601459)
+# print(select('time_to_give', conditions='WHERE date = "2022-04-30"'))
