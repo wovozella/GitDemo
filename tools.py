@@ -1,4 +1,4 @@
-from db_interface import select_value
+from db_interface import select
 from calendar import monthrange
 from datetime import datetime, date
 from json import dumps
@@ -82,28 +82,26 @@ def valid_input(update):
 # 'time' arg for this function is return of valid_input function
 # personal arg for defining either find intersections with others couriers
 # or with yourself
-def time_intersect(time, table_name, user_id, personal):
-    date, start, end = time
-    table = 'time_to_' + table_name
+def time_intersect(time, table, user_id, personal=False):
+    _date, start, end = time
 
-    condition = f'user_id != {user_id}'
+    condition = f'WHERE user_id != {user_id}'
     if personal:
-        condition = f'user_id = {user_id}'
+        condition = f'WHERE user_id = {user_id}'
 
-    if str(date) not in [i[0] for i in select_value(table, 'DISTINCT date', condition)]:
+    if str(_date) not in [i[0] for i in select(table, 'DISTINCT date', condition)]:
         return False
-    condition = condition + f' and date = "{date}"'
-    print(condition)
+    condition = condition + f' and date = "{_date}"'
 
     intersected = []
-    for time_interval in select_value(table, 'start_hour, end_hour, user_id', condition):
+    for time_interval in select(table, 'start_hour, end_hour, user_id', condition):
         if set(range(*time_interval[:-1])).intersection(set(range(start, end))):
             intersected.append(time_interval)
 
     return intersected
 
 
-print(time_intersect((date(2022, 4, 20), 8, 24), 'give', 1171601459, True))
+# print(time_intersect((date(2022, 4, 20), 8, 24), 'time_to_give', 1171601459, True))
 
 
 def get_message(table_name, specific='IS NOT NULL'):
@@ -121,22 +119,21 @@ def get_message(table_name, specific='IS NOT NULL'):
     and_another_courier 8-24
     """
 
-    user_url = ' href="tg://user?id='
     message = ''
     # creating dict with date as a key
-    dates = {Date[0]: [] for Date in select_value(table_name, 'DISTINCT date',
-                                                  'ORDER BY date')}
+    dates = {Date[0]: [] for Date in select(table_name, 'DISTINCT date',
+                                            f'WHERE user_id {specific} ORDER BY date')}
     # filling dates dict
-    for Date, *details in select_value(
+    for Date, *details in select(
             table_name,
-            conditions=f"user_id {specific} ORDER BY date, start_hour"):
+            conditions=f"WHERE user_id {specific} ORDER BY date, start_hour"):
         dates[Date].append(details)
 
     for Date, values in dates.items():
         times = ''
         for time in values:
             *hours, name, user_id = time
-            times += f'<a{user_url}{user_id}">{name}</a> {hours[0]}-{hours[1]}\n'
+            times += f'<a href="tg://user?id={user_id}">{name}</a> {hours[0]}-{hours[1]}\n'
 
         # Formatting date from YYYY-MM-DD to DD.MM
         day_in_week = date(*[int(i) for i in Date.split('-')]).weekday()
@@ -151,3 +148,11 @@ def get_message(table_name, specific='IS NOT NULL'):
 def inline_buttons(list_of_buttons: list):
     buttons = [[{'text': button, 'callback_data': button} for button in list_of_buttons]]
     return dumps({'inline_keyboard': buttons})
+
+
+# get last word of table name as a parameter (give or take)
+# and simply change to one another
+def reverse_table(table_name):
+    if table_name == 'time_to_give':
+        return 'time_to_take'
+    return 'time_to_give'

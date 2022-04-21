@@ -20,16 +20,23 @@ ignore_chat_ids = {}
 
 def dialog_loop(func):
     def nested(*args):
-        ignore_chat_ids[args[0]] = []
-        func(chat_ID, args[1:])
-        ignore_chat_ids.pop(args[0])
-
+        chat_id = args[0]
+        ignore_chat_ids[chat_id] = []
+        func(*args)
+        ignore_chat_ids.pop(chat_id)
     return nested
 
 
 def get_new_updates():
     global offset
     new_updates = []
+
+    try:
+        updates = requests.get(f'{api_url}/getUpdates',
+                               data={'offset': offset}).json()["result"]
+    except KeyError:    # Case of no updates
+        return new_updates
+
     for update in requests.get(f'{api_url}/getUpdates',
                                data={'offset': offset}).json()["result"]:
 
@@ -66,7 +73,7 @@ def send_message(chat_id, text, keyboard=None):
                          ).json()['result']
 
 
-def delete_button(resp):
+def delete_buttons(resp):
     # resp - response.json()['result'] from sent message
     message_id = resp['message_id']
     chat_id = tools.get_chat_id(resp)
@@ -78,11 +85,16 @@ def delete_button(resp):
 
 
 @dialog_loop
-def time_input_thread(chat_id, command):
-    command = command[0]
-    msg = 'Введите дату и временной промежуток в формате\n04.02 8-24'
-    resp = send_message(chat_id, msg,
-                        tools.inline_buttons(['Отменить']))
+def time_replacement_thread(chat_id, table, prev_time, new_time, user_id):
+    times = ''
+    for time in prev_time:
+        start = time[0]
+        end = time[1]
+        times += f'{start}-{end}\n'
+
+    resp = send_message(chat_id, 'В этот день у тебя уже есть временные\n'
+                                 f'{times}\n',
+                        tools.inline_buttons(['Заменить', 'Отмена']))
 
     while True:
         for update in ignore_chat_ids[chat_id]:
@@ -90,20 +102,68 @@ def time_input_thread(chat_id, command):
                 ignore_chat_ids[chat_id].pop(0)
 
             if 'callback_query' in update:
-                if update['callback_query']['data'] == 'Отменить':
-                    delete_button(resp)
+                if update['callback_query']['data'] == 'Отмена':
+                    delete_buttons(resp)
+                    send_message(chat_id, 'Отменено')
+                    return
+
+                if update['callback_query']['data'] == 'Заменить':
+                    print(*new_time)
+                    db.update(table, new_time, user_id)
+                    delete_buttons(resp)
+                    send_message(chat_id, 'Успешно')
+                    return
+
+
+
+def time_changing_thread(chat_id, intersected_times):
+    send_message(chat_id, 'Запущен поток ')
+
+
+@dialog_loop
+def time_input_thread(chat_id, command):
+    resp = send_message(chat_id, 'Введите дату и временной промежуток в формате\n'
+                                 '04.02 8-24',
+                        tools.inline_buttons(['Отмена']))
+
+    while True:
+        for update in ignore_chat_ids[chat_id]:
+            with lock:
+                ignore_chat_ids[chat_id].pop(0)
+
+            if 'callback_query' in update:
+                if update['callback_query']['data'] == 'Отмена':
+                    delete_buttons(resp)
                     send_message(chat_id, 'Отменено')
                     return
                 continue
 
-
             valid_time = tools.valid_input(update)
             if isinstance(valid_time, tuple):
-                take_or_give = command[1:]
+                table = 'time_to_' + command[1:]
                 name = update['message']['from']['first_name']
                 user_id = update['message']['from']['id']
 
-                db.insert_value(f'time_to_{take_or_give}', (*valid_time, name, user_id))
+                # check if courier tries to post a time that intersect with his own posts
+                intersection = tools.time_intersect(valid_time, table, user_id,
+                                                    personal=True)
+                if intersection:
+                    start_new_thread(time_replacement_thread,
+                                     (chat_id, table, intersection, valid_time, user_id))
+                    return
+
+                # reverse table name and check if there is intersection with other couriers
+                table = tools.reverse_table(table)
+                intersection = tools.time_intersect(valid_time, table, user_id,
+                                                    personal=False)
+                if intersection:
+                    start_new_thread(time_changing_thread, (chat_id, intersection))
+                    return
+                table = tools.reverse_table(table)
+                # change it back to work properly with the rest of the function
+
+                # if no any intersections put data to db
+                db.insert(table, (*valid_time, name, user_id))
                 send_message(chat_id, 'Успешно')
                 return
             else:
@@ -123,8 +183,8 @@ while True:
             start_new_thread(time_input_thread, (chat_ID, command))
 
         if command in ('/who_give', '/who_take'):
-            take_or_give = command.split('_')[1]
-            message = tools.get_message(f'time_to_{take_or_give}')
+            _take_or_give = command.split('_')[1]
+            message = tools.get_message(f'time_to_{_take_or_give}')
             if not message:
                 message = f'Пока что никто не делится временными'
             send_message(chat_ID, message)
@@ -141,7 +201,6 @@ while True:
 
             if command == '/edit':
                 send_message(chat_ID,
-                             'Для редактирования просто заново введи временные\n'
-                             'используя /give или /take\n')
+                             'Для редактирования просто заново введи временные')
 
     sleep(0.1)
