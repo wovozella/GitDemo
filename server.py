@@ -24,6 +24,7 @@ def dialog_loop(func):
         ignore_chat_ids[chat_id] = []
         func(*args)
         ignore_chat_ids.pop(chat_id)
+
     return nested
 
 
@@ -32,9 +33,9 @@ def get_new_updates():
     new_updates = []
 
     try:
-        updates = requests.get(f'{api_url}/getUpdates',
-                               data={'offset': offset}).json()["result"]
-    except KeyError:    # Case of no updates
+        requests.get(f'{api_url}/getUpdates',
+                     data={'offset': offset}).json()["result"]
+    except KeyError:  # Case of no updates
         return new_updates
 
     for update in requests.get(f'{api_url}/getUpdates',
@@ -115,9 +116,14 @@ def time_replacement_thread(chat_id, table, prev_time, new_time, user_id):
                     return
 
 
-
 def time_changing_thread(chat_id, intersected_times):
-    send_message(chat_id, 'Запущен поток ')
+    send_message(chat_id, 'Запущен поток замены')
+    return
+
+
+def deletion_thread(chat_id, user_id):
+    send_message(chat_id, 'Запущен поток удаления')
+    return
 
 
 @dialog_loop
@@ -183,20 +189,21 @@ while True:
             start_new_thread(time_input_thread, (chat_ID, command))
 
         if command in ('/who_give', '/who_take'):
+            user_id = update['message']['from']['id']
             _take_or_give = command.split('_')[1]
-            message = tools.get_message(f'time_to_{_take_or_give}')
+            message = tools.get_message(f'time_to_{_take_or_give}', user_id)
             if not message:
                 message = f'Пока что никто не делится временными'
             send_message(chat_ID, message)
 
-        if command in ('/show', '/edit'):
+        if command in ('/show', '/edit', '/delete'):
             user_id = update['message']['from']['id']
             send_message(chat_ID,
-                         f"<u>Берёшь</u>\n"
-                         f"{tools.get_message('time_to_take', specific=f'= {user_id}')}"
-                         f"\n"
-                         f"<u>Отдаёшь</u>\n"
-                         f"{tools.get_message('time_to_give', specific=f'= {user_id}')}"
+                         "<u>Берёшь</u>\n"
+                         f"{tools.get_message('time_to_take', user_id, specific=True)}"
+                         "\n"
+                         "<u>Отдаёшь</u>\n"
+                         f"{tools.get_message('time_to_give', user_id, specific=True)}",
                          )
 
             if command == '/edit':

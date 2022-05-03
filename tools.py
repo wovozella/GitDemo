@@ -3,14 +3,13 @@ from calendar import monthrange
 from datetime import datetime, date
 from json import dumps
 
-now = datetime.now()
 month_in_seconds = 2_592_000  # 30 days
 
 # for avoiding not clearly raised exceptions in valid_input()
 built_in_exceptions = {chr(i) for i in range(97, 123)}
 
 days = {0: 'Понедельник', 1: 'Вторник', 2: 'Среда', 3: 'Четверг',
-        4: 'Пятница', 5: 'Суббота', 6: 'Воскресенте'}
+        4: 'Пятница', 5: 'Суббота', 6: 'Воскресенье'}
 
 
 # It's too complicated to easily iterate dictionaries with undefined nesting
@@ -33,6 +32,7 @@ def get_chat_id(dictionary):
 
 
 def valid_input(update):
+    now = datetime.now()
     try:
         _date, time = update['message']['text'].split(' ')
         start, end = time.split('-')
@@ -91,7 +91,7 @@ def time_intersect(time, table, user_id, personal=False):
 
     if str(_date) not in [i[0] for i in select(table, 'DISTINCT date', condition)]:
         return False
-    condition = condition + f' and date = "{_date}"'
+    condition += f' and date = "{_date}"'
 
     intersected = []
     for time_interval in select(table, 'start_hour, end_hour, user_id', condition):
@@ -101,16 +101,12 @@ def time_intersect(time, table, user_id, personal=False):
     return intersected
 
 
-# print(time_intersect((date(2022, 4, 20), 8, 24), 'time_to_give', 1171601459, True))
-
-
-def get_message(table_name, specific='IS NOT NULL'):
+def get_message(table_name, user_id, specific=False):
     """
-    Format message for responding on a who take/give command
-    based on relevant tables.
+    Format message for showing records from tables
     "specific" argument needs for showing courier his own times to edit/delete them
-    Returning message looks like that:
 
+    Returning message looks like that:
     05.14 (date MM.DD bold text)
     courier_name first_hour-last_hour (With link to user)
     another_courier 15-23
@@ -118,30 +114,39 @@ def get_message(table_name, specific='IS NOT NULL'):
     05.16
     and_another_courier 8-24
     """
+    condition = f'user_id != {user_id}'
+    if specific:
+        condition = f'user_id = {user_id}'
 
     message = ''
     # creating dict with date as a key
     dates = {Date[0]: [] for Date in select(table_name, 'DISTINCT date',
-                                            f'WHERE user_id {specific} ORDER BY date')}
+                                            f'WHERE {condition} ORDER BY date')}
     # filling dates dict
     for Date, *details in select(
             table_name,
-            conditions=f"WHERE user_id {specific} ORDER BY date, start_hour"):
+            conditions=f"WHERE {condition} ORDER BY date, start_hour"):
         dates[Date].append(details)
 
     for Date, values in dates.items():
         times = ''
         for time in values:
             *hours, name, user_id = time
-            times += f'<a href="tg://user?id={user_id}">{name}</a> {hours[0]}-{hours[1]}\n'
+            courier_name = f'<a href="tg://user?id={user_id}">{name}</a> '
+            if specific:
+                courier_name = ''
+            times += f'{courier_name}{hours[0]}-{hours[1]}\n'
 
         # Formatting date from YYYY-MM-DD to DD.MM
-        day_in_week = date(*[int(i) for i in Date.split('-')]).weekday()
+        weekday = date(*[int(i) for i in Date.split('-')]).weekday()
         Date = Date.split('-')
         Date = Date[1] + '.' + Date[2]
 
-        message += f'<b>{Date} {days[day_in_week]}</b>\n' \
-                   f'{times}\n'
+        new_line = '\n'
+        if specific:
+            new_line = ''
+        message += f'<b>{Date} {days[weekday]}</b>\n' \
+                   f'{times}{new_line}'
     return message
 
 
