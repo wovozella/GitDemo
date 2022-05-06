@@ -11,6 +11,8 @@ built_in_exceptions = {chr(i) for i in range(97, 123)}
 days = {0: 'Понедельник', 1: 'Вторник', 2: 'Среда', 3: 'Четверг',
         4: 'Пятница', 5: 'Суббота', 6: 'Воскресенье'}
 
+translate = {'Отдаёшь': 'give', 'Берёшь': 'take'}
+
 
 # It's too complicated to easily iterate dictionaries with undefined nesting
 # that has more than one key, so the chat id stores in global variable,
@@ -137,7 +139,7 @@ def get_message(table_name, user_id, specific=False):
                 courier_name = ''
             times += f'{courier_name}{hours[0]}-{hours[1]}\n'
 
-        # Formatting date from YYYY-MM-DD to DD.MM
+        # Formatting date from YYYY-MM-DD to (DD.MM weekday)
         weekday = date(*[int(i) for i in Date.split('-')]).weekday()
         Date = Date.split('-')
         Date = Date[1] + '.' + Date[2]
@@ -151,7 +153,9 @@ def get_message(table_name, user_id, specific=False):
 
 
 def inline_buttons(list_of_buttons: list):
-    buttons = [[{'text': button, 'callback_data': button} for button in list_of_buttons]]
+    buttons = []
+    for row in list_of_buttons:
+        buttons.append([{'text': button, 'callback_data': button} for button in row])
     return dumps({'inline_keyboard': buttons})
 
 
