@@ -75,7 +75,7 @@ def send_message(chat_id, text, keyboard=None):
 
 
 def delete_buttons(resp):
-    # resp - response.json()['result'] from sent message
+    # resp = response.json()['result'] from sent message
     message_id = resp['message_id']
     chat_id = tools.get_chat_id(resp)
     requests.post(f'{api_url}/editMessageReplyMarkup',
@@ -95,7 +95,7 @@ def time_replacement_thread(chat_id, table, prev_time, new_time, user_id):
 
     resp = send_message(chat_id, 'В этот день у тебя уже есть временные\n'
                                  f'{times}\n',
-                        tools.inline_buttons(['Заменить', 'Отмена']))
+                        tools.inline_buttons([['Заменить', 'Отмена']]))
 
     while True:
         for update in ignore_chat_ids[chat_id]:
@@ -121,16 +121,53 @@ def time_changing_thread(chat_id, intersected_times):
     return
 
 
+@dialog_loop
 def deletion_thread(chat_id, user_id):
-    send_message(chat_id, 'Запущен поток удаления')
-    return
+    callback_to_rowid = {}
+
+    def get_users_records(table):
+        ret = []
+        for date, start, end, row_id in db.select(
+                table, 'date, start_hour, end_hour, rowid',
+                conditions=f'WHERE user_id = {user_id} ORDER BY date'):
+
+            date = date.split('-')
+            date = date[1] + '.' + date[2]
+            date = f'{date} {start}-{end}'
+
+            ret.append([date])
+            callback_to_rowid[date] = row_id
+        return ret
+
+    time_to_take = get_users_records('time_to_take')
+    time_to_give = get_users_records('time_to_give')
+
+    send_message(chat_id, 'Нажми на те временные, которые хочешь удалить')
+    send_message(chat_id, 'Берёшь',
+                 tools.inline_buttons(time_to_take))
+    send_message(chat_id, 'Отдаёшь',
+                 tools.inline_buttons(time_to_give))
+
+    # code below awaits only for inline button pressing
+    while True:
+        for update in ignore_chat_ids[chat_id]:
+            with lock:
+                ignore_chat_ids[chat_id].pop(0)
+
+            if 'callback_query' in update:
+                callback = update['callback_query']['data']
+                table = 'time_to_' + tools.translate[update['callback_query']['message']['text']]
+                if [callback] in time_to_take + time_to_give:
+                    db.delete(table, f'WHERE rowid = {callback_to_rowid[callback]}')
+                    send_message(chat_id, 'Успешно')
+                    return
 
 
 @dialog_loop
 def time_input_thread(chat_id, command):
     resp = send_message(chat_id, 'Введите дату и временной промежуток в формате\n'
                                  '04.02 8-24',
-                        tools.inline_buttons(['Отмена']))
+                        tools.inline_buttons([['Отмена']]))
 
     while True:
         for update in ignore_chat_ids[chat_id]:
@@ -196,7 +233,7 @@ while True:
                 message = f'Пока что никто не делится временными'
             send_message(chat_ID, message)
 
-        if command in ('/show', '/edit', '/delete'):
+        if command in ('/show', '/edit'):
             user_id = update['message']['from']['id']
             send_message(chat_ID,
                          "<u>Берёшь</u>\n"
@@ -209,5 +246,9 @@ while True:
             if command == '/edit':
                 send_message(chat_ID,
                              'Для редактирования просто заново введи временные')
+
+        if command == '/delete':
+            user_id = update['message']['from']['id']
+            start_new_thread(deletion_thread, (chat_ID, user_id))
 
     sleep(0.1)
