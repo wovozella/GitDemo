@@ -76,12 +76,20 @@ def send_message(chat_id, text, keyboard=None):
 
 def delete_buttons(resp):
     # resp = response.json()['result'] from sent message
-    message_id = resp['message_id']
     chat_id = tools.get_chat_id(resp)
     requests.post(f'{api_url}/editMessageReplyMarkup',
                   data={
                       'chat_id': chat_id,
-                      'message_id': message_id,
+                      'message_id': resp['message_id'],
+                  })
+
+
+def delete_message(resp):
+    chat_id = tools.get_chat_id(resp)
+    requests.post(f'{api_url}/deleteMessage',
+                  data={
+                      'chat_id': chat_id,
+                      'message_id': resp['message_id'],
                   })
 
 
@@ -130,7 +138,6 @@ def deletion_thread(chat_id, user_id):
         for date, start, end, row_id in db.select(
                 table, 'date, start_hour, end_hour, rowid',
                 conditions=f'WHERE user_id = {user_id} ORDER BY date'):
-
             date = date.split('-')
             date = date[1] + '.' + date[2]
             date = f'{date} {start}-{end}'
@@ -139,14 +146,27 @@ def deletion_thread(chat_id, user_id):
             callback_to_rowid[date] = row_id
         return ret
 
-    time_to_take = get_users_records('time_to_take')
-    time_to_give = get_users_records('time_to_give')
+    def clear_dialog():
+        delete_buttons(hint_resp)
+        if to_take:
+            delete_message(take_resp)
+        if to_give:
+            delete_message(give_resp)
 
-    send_message(chat_id, 'Нажми на те временные, которые хочешь удалить')
-    send_message(chat_id, 'Берёшь',
-                 tools.inline_buttons(time_to_take))
-    send_message(chat_id, 'Отдаёшь',
-                 tools.inline_buttons(time_to_give))
+    to_take = get_users_records('time_to_take')
+    to_give = get_users_records('time_to_give')
+    if not to_take and not to_give:
+        send_message(chat_id, 'Пока что нечего удалять')
+        return
+
+    hint_resp = send_message(chat_id, 'Нажми на те временные\nкоторые хочешь удалить',
+                             tools.inline_buttons([['Отмена']]))
+    if to_take:
+        take_resp = send_message(chat_id, 'Берёшь',
+                                 tools.inline_buttons(to_take))
+    if to_give:
+        give_resp = send_message(chat_id, 'Отдаёшь',
+                                 tools.inline_buttons(to_give))
 
     # code below awaits only for inline button pressing
     while True:
@@ -156,16 +176,24 @@ def deletion_thread(chat_id, user_id):
 
             if 'callback_query' in update:
                 callback = update['callback_query']['data']
-                table = 'time_to_' + tools.translate[update['callback_query']['message']['text']]
-                if [callback] in time_to_take + time_to_give:
+
+                if callback == 'Отмена':
+                    clear_dialog()
+                    send_message(chat_id, 'Отменено')
+                    return
+
+                table = 'time_to_' + tools.del_translate[update['callback_query']['message']['text']]
+                if [callback] in to_take + to_give:
                     db.delete(table, f'WHERE rowid = {callback_to_rowid[callback]}')
+                    clear_dialog()
                     send_message(chat_id, 'Успешно')
                     return
 
 
 @dialog_loop
 def time_input_thread(chat_id, command):
-    resp = send_message(chat_id, 'Введите дату и временной промежуток в формате\n'
+    resp = send_message(chat_id, f'Введите дату и временной промежуток\n'
+                                 f'который хотите {tools.input_translate[command]} в формате\n'
                                  '04.02 8-24',
                         tools.inline_buttons([['Отмена']]))
 
@@ -235,20 +263,25 @@ while True:
 
         if command in ('/show', '/edit'):
             user_id = update['message']['from']['id']
-            send_message(chat_ID,
-                         "<u>Берёшь</u>\n"
-                         f"{tools.get_message('time_to_take', user_id, specific=True)}"
-                         "\n"
-                         "<u>Отдаёшь</u>\n"
-                         f"{tools.get_message('time_to_give', user_id, specific=True)}",
-                         )
+            to_take = tools.get_message('time_to_take', user_id, specific=True)
+            to_give = tools.get_message('time_to_give', user_id, specific=True)
+            message = ''
+
+            if not to_take and not to_give:
+                message = 'Пока что ты не делишься и не берёшь часы, чтобы это сделать\n' \
+                          'используй команду /give (Отдать) или /take (Взять)'
+            if to_take:
+                message += f"<u>Берёшь</u>\n{to_take}\n"
+            if to_give:
+                message += f"<u>Отдаёшь</u>\n{to_give}"
+
+            send_message(chat_ID, message)
 
             if command == '/edit':
                 send_message(chat_ID,
                              'Для редактирования просто заново введи временные')
 
         if command == '/delete':
-            user_id = update['message']['from']['id']
-            start_new_thread(deletion_thread, (chat_ID, user_id))
+            start_new_thread(deletion_thread, (chat_ID, update['message']['from']['id']))
 
     sleep(0.1)

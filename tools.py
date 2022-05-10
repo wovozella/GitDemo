@@ -11,7 +11,9 @@ built_in_exceptions = {chr(i) for i in range(97, 123)}
 days = {0: 'Понедельник', 1: 'Вторник', 2: 'Среда', 3: 'Четверг',
         4: 'Пятница', 5: 'Суббота', 6: 'Воскресенье'}
 
-translate = {'Отдаёшь': 'give', 'Берёшь': 'take'}
+del_translate = {'Отдаёшь': 'give', 'Берёшь': 'take'}
+input_translate = {'/give': 'отдать', '/take': 'взять'}
+
 
 
 # It's too complicated to easily iterate dictionaries with undefined nesting
